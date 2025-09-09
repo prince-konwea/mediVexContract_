@@ -21,7 +21,7 @@ Practitioners receive NFTs that represent their professional licenses. These NFT
 
 ---
 
-## 🛠 Tech Stack
+##  Tech Stack
 - **Smart Contracts**: Solidity `^0.8.x`
 - **Framework**: Hardhat
 - **Token Standard**: ERC-721 (or ERC-1155 for multiple credentials)
