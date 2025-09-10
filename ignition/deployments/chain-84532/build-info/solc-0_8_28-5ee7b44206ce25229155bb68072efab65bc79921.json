@@ -1,0 +1,48 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-5ee7b44206ce25229155bb68072efab65bc79921",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "userSourceNameMap": {
+    "contracts/HealthcarePlatform.sol": "project/contracts/HealthcarePlatform.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/config/enum.sol": {
+        "content": "// SPDX-License-Identifier: UNLICENSED\r\npragma solidity ^0.8.28;\r\n\r\nenum UserType {\r\n    None,\r\n    Admin,\r\n    Doctor,\r\n    Nurse,\r\n    Psychiatrist,\r\n    Pharmacist,\r\n    Patient\r\n}"
+      },
+      "project/contracts/HealthcarePlatform.sol": {
+        "content": "// SPDX-License-Identifier: UNLICENSED\r\npragma solidity ^0.8.28;\r\n\r\nimport {UserType} from \"../config/enum.sol\";\r\nimport {IAdminAction, ICredentialManager, IVerifier, IUserRole} from \"../interface/IHealthcareInterface.sol\";\r\nimport {HealthCareEvent} from \"../events/events.sol\";\r\ncontract HealthcarePlatform is IAdminAction, ICredentialManager, IVerifier, IUserRole, HealthCareEvent {\r\n   \r\n\r\n    address public owner;\r\n    mapping(address => bool) public admins;\r\n\r\n    mapping(address => UserType) public practitionerRoles;\r\n    mapping(address => uint256) public practitionerToTokenId;\r\n    mapping(uint256 => address) public tokenIdToPractitioner;\r\n    mapping(uint256 => string) public tokenIdToUri;\r\n    mapping(uint256 => uint256) public tokenIdToExpiry;\r\n\r\n    mapping(uint256 => mapping(address => uint256)) private _balances;\r\n    mapping(address => mapping(address => bool)) private _operatorApprovals;\r\n\r\n    uint256 public nextTokenId = 1;\r\n\r\n    modifier onlyOwner() {\r\n        require(msg.sender == owner, \"Not owner\");\r\n        _;\r\n    }\r\n\r\n    modifier onlyAdmin() {\r\n        require(admins[msg.sender], \"Not admin\");\r\n        _;\r\n    }\r\n\r\n    constructor() {\r\n        owner = msg.sender;\r\n        admins[msg.sender] = true;\r\n    }\r\n\r\n    function addAdmin(address admin) external onlyOwner {\r\n        admins[admin] = true;\r\n    }\r\n\r\n    function removeAdmin(address adminToremove) external onlyOwner {\r\n        admins[adminToremove] = false;\r\n    }\r\n\r\n    function transferOwnership(address newOwner) external onlyOwner {\r\n        require(newOwner != address(0), \"Invalid new owner\");\r\n        owner = newOwner;\r\n        admins[newOwner] = true;\r\n    }\r\n\r\n    function assignRole(address user, UserType role) external onlyAdmin {\r\n        practitionerRoles[user] = role;\r\n    }\r\n\r\n    function getRole(address user) external view returns (UserType) {\r\n        return practitionerRoles[user];\r\n    }\r\n\r\n    function revokeRole(address user) external onlyAdmin {\r\n        practitionerRoles[user] = UserType.None;\r\n    }\r\n\r\n    function registerPractitionerMetadata(address practitioner, string memory uri, uint256 validUntil) external onlyAdmin {\r\n        require(practitioner != address(0), \"Invalid address\");\r\n        require(practitionerToTokenId[practitioner] == 0, \"Already registered\");\r\n        uint256 tokenId = nextTokenId++;\r\n        practitionerToTokenId[practitioner] = tokenId;\r\n        tokenIdToPractitioner[tokenId] = practitioner;\r\n        tokenIdToUri[tokenId] = uri;\r\n        tokenIdToExpiry[tokenId] = validUntil;\r\n        emit URI(uri, tokenId);\r\n    }\r\n\r\n    function issueNftCredentialToPractitioner(address practitioner) external onlyAdmin {\r\n        uint256 tokenId = practitionerToTokenId[practitioner];\r\n        require(tokenId != 0, \"Not registered\");\r\n        require(_balances[tokenId][practitioner] == 0, \"Already issued\");\r\n        _balances[tokenId][practitioner] = 1;\r\n        emit TransferSingle(msg.sender, address(0), practitioner, tokenId, 1);\r\n    }\r\n\r\n    function revokeNftCredentialFromPractitioner(address practitioner) external onlyAdmin {\r\n        uint256 tokenId = practitionerToTokenId[practitioner];\r\n        require(tokenId != 0, \"Not registered\");\r\n        require(_balances[tokenId][practitioner] == 1, \"No credential\");\r\n        _balances[tokenId][practitioner] = 0;\r\n        emit TransferSingle(msg.sender, practitioner, address(0), tokenId, 1);\r\n    }\r\n\r\n    function renewNftCredentialForPractitioner(address practitioner) external onlyAdmin {\r\n        \r\n        uint256 tokenId = practitionerToTokenId[practitioner];\r\n        require(tokenId != 0, \"Not registered\");\r\n        require(_balances[tokenId][practitioner] == 1, \"No credential\");\r\n        tokenIdToExpiry[tokenId] = block.timestamp + 365 days;\r\n    }\r\n\r\n    function isValidCredential(address practitioner, uint256 tokenId) external view returns (bool) {\r\n        return _balances[tokenId][practitioner] == 1 && block.timestamp < tokenIdToExpiry[tokenId];\r\n    }\r\n\r\n    function isRole(address practitioner, uint256 tokenId) external view returns (bool) {\r\n        return tokenIdToPractitioner[tokenId] == practitioner && practitionerRoles[practitioner] != UserType.None;\r\n    }\r\n\r\n    function getCredentialUrl(uint256 tokenId) external view returns (string memory) {\r\n        return tokenIdToUri[tokenId];\r\n    }\r\n\r\n    function balanceOf(address account, uint256 id) external view returns (uint256) {\r\n        return _balances[id][account];\r\n    }\r\n\r\n    function balanceOfBatch(address[] calldata accounts, uint256[] calldata ids) external view returns (uint256[] memory) {\r\n        uint256[] memory batchBalances = new uint256[](accounts.length);\r\n        for (uint256 i = 0; i < accounts.length; i++) {\r\n            batchBalances[i] = _balances[ids[i]][accounts[i]];\r\n        }\r\n        return batchBalances;\r\n    }\r\n\r\n    function setApprovalForAll(address operator, bool approved) external {\r\n        require(operator != msg.sender, \"Cannot approve self\");\r\n        _operatorApprovals[msg.sender][operator] = approved;\r\n        emit ApprovalForAll(msg.sender, operator, approved);\r\n    }\r\n\r\n    function isApprovedForAll(address account, address operator) external view returns (bool) {\r\n        return _operatorApprovals[account][operator];\r\n    }\r\n\r\n    function getPractitionerTokenId(address practitioner) external view returns (uint256) {\r\n        return practitionerToTokenId[practitioner];\r\n    }\r\n\r\n    function getTokenUri(uint256 tokenId) external view returns (string memory) {\r\n        return tokenIdToUri[tokenId];\r\n    }\r\n\r\n    function getCredentialExpiry(uint256 tokenId) external view returns (uint256) {\r\n        return tokenIdToExpiry[tokenId];\r\n    }\r\n}\r\n"
+      },
+      "project/events/events.sol": {
+        "content": "// SPDX-License-Identifier: UNLICENSED\r\npragma solidity ^0.8.28;\r\n\r\ninterface HealthCareEvent{\r\n     event TransferSingle(address indexed operator, address indexed from, address indexed to, uint256 id, uint256 value);\r\n    event ApprovalForAll(address indexed account, address indexed operator, bool approved);\r\n    event URI(string value, uint256 indexed id);\r\n}"
+      },
+      "project/interface/IHealthcareInterface.sol": {
+        "content": "// SPDX-License-Identifier: UNLICENSED\r\npragma solidity ^0.8.28;\r\n\r\nimport {UserType} from \"../config/enum.sol\";\r\n\r\ninterface IAdminAction{\r\n   function addAdmin(address admin) external;\r\n   function removeAdmin(address adminToremove) external;\r\n   function transferOwnership(address newOwner) external;\r\n}\r\n\r\ninterface ICredentialManager{\r\n    function issueNftCredentialToPractitioner(address user) external;\r\n    function revokeNftCredentialFromPractitioner(address user) external;\r\n    function renewNftCredentialForPractitioner(address user) external;\r\n}\r\n\r\ninterface IVerifier{\r\n    function isValidCredential(address practitioner, uint256 tokenId) external view returns(bool);\r\n    function isRole(address practitioner, uint256 tokenId) external view returns(bool);\r\n    function getCredentialUrl(uint256 tokenId) external view returns(string memory);\r\n}\r\n\r\ninterface IUserRole{\r\n    function assignRole(address user, UserType role) external;\r\n    function getRole(address user) external view returns(UserType);\r\n    function revokeRole(address user) external;\r\n}"
+      }
+    }
+  }
+}

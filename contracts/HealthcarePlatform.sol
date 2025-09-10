@@ -3,11 +3,9 @@ pragma solidity ^0.8.28;
 
 import {UserType} from "../config/enum.sol";
 import {IAdminAction, ICredentialManager, IVerifier, IUserRole} from "../interface/IHealthcareInterface.sol";
-
-contract HealthcarePlatform is IAdminAction, ICredentialManager, IVerifier, IUserRole {
-    event TransferSingle(address indexed operator, address indexed from, address indexed to, uint256 id, uint256 value);
-    event ApprovalForAll(address indexed account, address indexed operator, bool approved);
-    event URI(string value, uint256 indexed id);
+import {HealthCareEvent} from "../events/events.sol";
+contract HealthcarePlatform is IAdminAction, ICredentialManager, IVerifier, IUserRole, HealthCareEvent {
+   
 
     address public owner;
     mapping(address => bool) public admins;
@@ -47,6 +45,7 @@ contract HealthcarePlatform is IAdminAction, ICredentialManager, IVerifier, IUse
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Invalid new owner");
         owner = newOwner;
         admins[newOwner] = true;
     }
@@ -91,6 +90,7 @@ contract HealthcarePlatform is IAdminAction, ICredentialManager, IVerifier, IUse
     }
 
     function renewNftCredentialForPractitioner(address practitioner) external onlyAdmin {
+        
         uint256 tokenId = practitionerToTokenId[practitioner];
         require(tokenId != 0, "Not registered");
         require(_balances[tokenId][practitioner] == 1, "No credential");
